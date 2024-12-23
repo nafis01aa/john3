@@ -1,0 +1,9 @@
+aiofiles
+aioshutil
+cryptg
+telethon
+motor
+phonenumbers
+pymongo
+python-dateutil
+python-ffmpeg
