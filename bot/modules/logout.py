@@ -18,10 +18,10 @@ async def logout(event):
 
     markup = button()
 
-    for account in user.login_accounts:
+    for i, account in enumerate(user.login_accounts, start=1):
         markup.inline(
-            account['name'],
-            f"logout:{account['id']}"
+            f"{i}. {account['name']}",
+            f"logout:{i}:{account['id']}"
         )
 
     markup.inline(command.cancel_menu, 'logout:delete_query', position='footer')
@@ -30,11 +30,12 @@ async def logout(event):
 
 @warn_chats
 async def logout_b(event):
-    pid = event.data.decode()
+    pid = event.data.decode().split(':',2)[-1]
 
     if 'delete_query' in pid:
         await event.delete()
         return
 
-    await db.remove_login(event.chat_id, id=pid)
+    idx = event.data.decode().split(':',2)[1]
+    await db.remove_login(event.chat_id, id=int(pid), idx=idx)
     await event.edit("**Log Out Successful** ✅")

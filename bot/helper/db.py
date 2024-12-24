@@ -108,11 +108,16 @@ class db_handle:
         user_id = str(user_id)
 
         if document := await self.users.find_one({"user_id": user_id}):
+            old_accounts = list(document['login_accounts'])
+
+            for idx, i in enumerate(old_accounts, start=1):
+                if str(idx) == kwargs.get('idx',-1):
+                    if i.get(next(iter(kwargs)),'') == kwargs.get(next(iter(kwargs)),'noo'):
+                        old_accounts.remove(i)
+
             await self.users.update_one(
                 {"_id": document["_id"]},
-                {"$pull": {
-                    "login_accounts": dict(kwargs)
-                }}
+                {"$set": {'login_accounts': old_accounts}}
             )
 
     async def mark_string(self, user_id, string, flag=True):
