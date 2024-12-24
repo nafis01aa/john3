@@ -45,7 +45,7 @@ async def login(event):
                 config.telegram.api,
                 config.telegram.hash,
                 sequential_updates=False,
-                receive_updates=False
+                receive_updates=True
             )
 
             await app.connect()

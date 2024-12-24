@@ -65,7 +65,7 @@ async def forward(event):
                     telethon.sessions.StringSession(
                         d['string']
                     ), config.telegram.api, config.telegram.hash,
-                    sequential_updates=False, receive_updates=False,
+                    sequential_updates=False, receive_updates=True,
                     request_retries=10, timeout=20, connection_retries=10,
                     retry_delay=5, auto_reconnect=True, flood_sleep_threshold=180
                 )
@@ -144,7 +144,6 @@ async def forward(event):
         await disconnect(client)
 
 progress_trackers = {}
-do_amount_dict = {}
 
 async def progress_bar(current_bytes, total_bytes, task_id, message, current_id, total_ids, status="", interval=10):
     current_time = time.time()
@@ -181,29 +180,8 @@ async def download_while_nondisconnect(client, *args, **kwargs):
     try:
         return await client.download_media(*args, **kwargs)
     except ConnectionError:
-        try:
-            await client.connect()
-            return await download_while_nondisconnect(client, *args, **kwargs)
-        except:
-            return False
-
-async def do_until_amount(request, do_id, *args, **kwargs):
-    try:
-        if do_amount_dict.get(do_id, 0) > 5:
-            do_amount_dict.pop(do_id, None)
-            return None
-
-        res = await request(*args, **kwargs)
-        do_amount_dict.pop(do_id, None)
-        return res
-    except:
-        if do_id in do_amount_dict:
-            do_amount_dict[do_id] += 1
-        else:
-            do_amount_dict[do_id] = 1
-
-        await asyncio.sleep(20)
-        return await do_until_amount(request, do_id, *args, **kwargs)
+        await client.connect()
+        return await client.download_media(*args, **kwargs)
 
 async def create_task(target, ids, client, destination, no_disconnect, loading, db_user):
     total_sent = 0
@@ -212,11 +190,25 @@ async def create_task(target, ids, client, destination, no_disconnect, loading, 
     task_id = token_urlsafe(12)
 
     for idx, id in enumerate(ids, start=1):
-        message = await get_messages(
-            client,
-            target,
-            [id]
-        )
+        try:
+            message = await get_messages(
+                client,
+                target,
+                [id]
+            )
+        except (errors.FloodWaitError, errors.FloodPremiumWaitError) as e:
+            await bot.send_message(
+                destination,
+                f"**ᴀ ꜰʟᴏᴏᴅᴡᴀɪᴛ ᴇʀʀᴏᴛ ʜᴀꜱ ʙᴇᴇɴ ᴏᴄᴄᴜʀᴇᴅ ᴏɴ ʏᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ᴡɪᴛʜ {e.seconds} ꜱᴇᴄᴏɴᴅꜱ ᴏꜰ ᴡᴀɪᴛ ⏱️ ꜰᴏʀᴡᴀʀᴅɪɴɢ ꜱᴛᴏᴘᴘᴇᴅ ʜᴇʀᴇ. ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀꜰᴛᴇʀ ꜰʟᴏᴏᴅ ᴄᴏᴍᴘʟᴇᴛᴇꜱ. ⚠️**")
+            break
+        except:
+            exc_info = traceback.format_exc()
+            await bot.send_message(destination, f"**ᴛʜᴇʀᴇ ᴡᴀꜱ ᴀɴ ɪɴᴛᴇʀɴᴀʟ ᴇʀʀᴏʀ, ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ!** ⚠️")
+            await bot.send_message(
+                "NafisMuhtadi",
+                f"**An error occurred:**\n```bash\n{exc_info}```"
+            )
+            break
 
         if isinstance(message, list):
             message = message[0] if message else types.MessageEmpty(1, 2)
@@ -254,86 +246,135 @@ async def create_task(target, ids, client, destination, no_disconnect, loading, 
             else:
                 continue
 
-            do_id = token_urlsafe(12)
-            download_result = await do_until_amount(
-                download_file, do_id,
-                client=client, location=file,
-                out=open(out, "wb"), progress_callback=progress_bar,
-                progress_callback_args=(
-                    task_id, loading_media, idx, len(ids)),
-                progress_callback_kwargs=dict(status=" (ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ)")
-            )
-
-            if download_result is None:
-                await bot.send_message(
-                    destination, f"**ᴍᴇꜱꜱᴀɢᴇ ɪᴅ {id} ꜱᴇᴇᴍꜱ ᴘʀᴏʙʟᴇᴍᴀᴛɪᴄ ɪɴ ᴛʜᴇ ꜱᴇQᴜᴇɴᴄᴇ ᴏꜰ {idx}, ꜱᴋɪᴘᴘɪɴɢ...**"
+            try:
+                await download_file(
+                    client=client, location=file,
+                    out=open(out, "wb"), progress_callback=progress_bar,
+                    progress_callback_args=(
+                        task_id, loading_media, idx, len(ids)),
+                    progress_callback_kwargs=dict(status=" (ᴅᴏᴡɴʟᴏᴀᴅɪɴɢ)")
                 )
-                await asyncio.sleep(5)
-                continue
-
-            do_up_id = token_urlsafe(12)
-            input_file = await do_until_amount(
-                upload_file, do_up_id,
-                client=bot, file=open(out, "rb"),
-                name=out, progress_callback=progress_bar,
-                progress_callback_args=(
-                    task_id, loading_media, idx, len(ids)),
-                progress_callback_kwargs=dict(status=" (ᴜᴘʟᴏᴀᴅɪɴɢ)")
-            )
-
-            if input_file is None:
+            except (errors.FloodWaitError, errors.FloodPremiumWaitError) as e:
+                await loading_media.delete()
                 await bot.send_message(
-                    destination, f"**ᴍᴇꜱꜱᴀɢᴇ ɪᴅ {id} ꜱᴇᴇᴍꜱ ᴘʀᴏʙʟᴇᴍᴀᴛɪᴄ ɪɴ ᴜᴘʟᴏᴀᴅɪɴɢ ᴛʜᴇ ꜱᴇQᴜᴇɴᴄᴇ ᴏꜰ {idx}, ꜱᴋɪᴘᴘɪɴɢ...**"
+                    destination,
+                    f"**ᴀ ꜰʟᴏᴏᴅᴡᴀɪᴛ ᴇʀʀᴏᴛ ʜᴀꜱ ʙᴇᴇɴ ᴏᴄᴄᴜʀᴇᴅ ᴏɴ ʏᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ᴡɪᴛʜ {e.seconds} ꜱᴇᴄᴏɴᴅꜱ ᴏꜰ ᴡᴀɪᴛ ⏱️ ꜰᴏʀᴡᴀʀᴅɪɴɢ ꜱᴛᴏᴘᴘᴇᴅ ʜᴇʀᴇ. ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀꜰᴛᴇʀ ꜰʟᴏᴏᴅ ᴄᴏᴍᴘʟᴇᴛᴇꜱ. ⚠️**")
+                await remove_path(out)
+                break
+            except:
+                await loading_media.delete()
+                exc_info = traceback.format_exc()
+                await bot.send_message(destination, f"**ᴛʜᴇʀᴇ ᴡᴀꜱ ᴀɴ ɪɴᴛᴇʀɴᴀʟ ᴇʀʀᴏʀ, ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ!** ⚠️")
+                await bot.send_message(
+                    "NafisMuhtadi",
+                    f"**An error occurred:**\n```bash\n{exc_info}```"
                 )
-                await asyncio.sleep(5)
-                continue
+                await remove_path(out)
+                break
+
+            try:
+                input_file = await upload_file(
+                    client=bot, file=open(out, "rb"),
+                    name=out, progress_callback=progress_bar,
+                    progress_callback_args=(
+                        task_id, loading_media, idx, len(ids)),
+                    progress_callback_kwargs=dict(status=" (ᴜᴘʟᴏᴀᴅɪɴɢ)")
+                )
+            except (errors.FloodWaitError, errors.FloodPremiumWaitError) as e:
+                await loading_media.delete()
+                await bot.send_message(
+                    destination,
+                    f"**ᴀ ꜰʟᴏᴏᴅᴡᴀɪᴛ ᴇʀʀᴏᴛ ʜᴀꜱ ʙᴇᴇɴ ᴏᴄᴄᴜʀᴇᴅ ᴏɴ ʏᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ᴡɪᴛʜ {e.seconds} ꜱᴇᴄᴏɴᴅꜱ ᴏꜰ ᴡᴀɪᴛ ⏱️ ꜰᴏʀᴡᴀʀᴅɪɴɢ ꜱᴛᴏᴘᴘᴇᴅ ʜᴇʀᴇ. ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀꜰᴛᴇʀ ꜰʟᴏᴏᴅ ᴄᴏᴍᴘʟᴇᴛᴇꜱ. ⚠️**")
+                await remove_path(out)
+                break
+            except:
+                await loading_media.delete()
+                exc_info = traceback.format_exc()
+                await bot.send_message(destination, f"**ᴛʜᴇʀᴇ ᴡᴀꜱ ᴀɴ ɪɴᴛᴇʀɴᴀʟ ᴇʀʀᴏʀ, ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ!** ⚠️")
+                await bot.send_message(
+                    "NafisMuhtadi",
+                    f"**An error occurred:**\n```bash\n{exc_info}```"
+                )
+                await remove_path(out)
+                break
 
             if isinstance(message.media, types.MessageMediaPhoto):
                 thumb = None
+                thumb_location = None
                 file = types.InputMediaUploadedPhoto(file=input_file)
             else:
-                thumb = await download_while_nondisconnect(
-                    client, message, thumb=-1
-                )
+                try:
+                    thumb_location = await download_while_nondisconnect(
+                        client, message, thumb=-1
+                    )
+                    thumb = await bot.upload_file(thumb_location)
+                except (errors.FloodWaitError, errors.FloodPremiumWaitError) as e:
+                    await loading_media.delete()
+                    await bot.send_message(
+                        destination,
+                        f"**ᴀ ꜰʟᴏᴏᴅᴡᴀɪᴛ ᴇʀʀᴏᴛ ʜᴀꜱ ʙᴇᴇɴ ᴏᴄᴄᴜʀᴇᴅ ᴏɴ ʏᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ᴡɪᴛʜ {e.seconds} ꜱᴇᴄᴏɴᴅꜱ ᴏꜰ ᴡᴀɪᴛ ⏱️ ꜰᴏʀᴡᴀʀᴅɪɴɢ ꜱᴛᴏᴘᴘᴇᴅ ʜᴇʀᴇ. ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀꜰᴛᴇʀ ꜰʟᴏᴏᴅ ᴄᴏᴍᴘʟᴇᴛᴇꜱ. ⚠️**")
+                    await remove_path(out)
 
-                if thumb is False:
+                    try:
+                        await remove_path(thumb_location)
+                    except:
+                        pass
+                    break
+                except:
                     thumb = None
+                    thumb_location = None
 
                 file = types.InputMediaUploadedDocument(
                     file=input_file,
                     mime_type=MimeTypes().guess_type(out)[0],
                     attributes=message.document.attributes,
-                    thumb=await bot.upload_file(thumb) if thumb else None
+                    thumb=thumb
                 )
 
-            do_sent_id = token_urlsafe(12)
-            is_sent_file = await do_until_amount(
-                bot.send_file, do_sent_id, destination,
-                file, caption=markdown.unparse(message.message or '', message.entities or []),
-                nosound_video=nosound_video
-            )
-
-            if is_sent_file is None:
+            try:
+                await bot.send_file(
+                    destination, file,
+                    caption=markdown.unparse(message.message or '', message.entities or []),
+                    nosound_video=nosound_video
+                )
+            except (errors.FloodWaitError, errors.FloodPremiumWaitError) as e:
+                await loading_media.delete()
                 await bot.send_message(
-                    destination, f"**ᴍᴇꜱꜱᴀɢᴇ ɪᴅ {id} ꜱᴇᴇᴍꜱ ᴘʀᴏʙʟᴇᴍᴀᴛɪᴄ ɪɴ ꜱᴇɴᴅɪɴɢ ᴛʜᴇ ꜰɪʟᴇ ɪɴ ᴛʜᴇ ꜱᴇQᴜᴇɴᴄᴇ ᴏꜰ {idx}, ꜱᴋɪᴘᴘɪɴɢ...**"
+                    destination,
+                    f"**ᴀ ꜰʟᴏᴏᴅᴡᴀɪᴛ ᴇʀʀᴏᴛ ʜᴀꜱ ʙᴇᴇɴ ᴏᴄᴄᴜʀᴇᴅ ᴏɴ ʏᴏᴜʀ ᴀᴄᴄᴏᴜɴᴛ ᴡɪᴛʜ {e.seconds} ꜱᴇᴄᴏɴᴅꜱ ᴏꜰ ᴡᴀɪᴛ ⏱️ ꜰᴏʀᴡᴀʀᴅɪɴɢ ꜱᴛᴏᴘᴘᴇᴅ ʜᴇʀᴇ. ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀꜰᴛᴇʀ ꜰʟᴏᴏᴅ ᴄᴏᴍᴘʟᴇᴛᴇꜱ. ⚠️**")
+                await remove_path(out)
+                await remove_path(thumb_location)
+                break
+            except:
+                await loading_media.delete()
+                exc_info = traceback.format_exc()
+                await bot.send_message(destination, f"**ᴛʜᴇʀᴇ ᴡᴀꜱ ᴀɴ ɪɴᴛᴇʀɴᴀʟ ᴇʀʀᴏʀ, ᴘʟᴇᴀꜱᴇ ᴛʀʏ ᴀɢᴀɪɴ ʟᴀᴛᴇʀ!** ⚠️")
+                await bot.send_message(
+                    "NafisMuhtadi",
+                    f"**An error occurred:**\n```bash\n{exc_info}```"
                 )
-                await asyncio.sleep(5)
-                continue
+                await remove_path(out)
+                await remove_path(thumb_location)
+                break
 
             await remove_path(out)
-            await remove_path(thumb)
+            await remove_path(thumb_location)
             await loading_media.delete()
         else:
-            await bot.send_message(
-                destination,
-                message=markdown.unparse(message.message or 'Empty', message.entities or [])
-            )
+            try:
+                await bot.send_message(
+                    destination,
+                    message=markdown.unparse(message.message or 'Empty', message.entities or [])
+                )
+            except:
+                pass
 
+        total_sent += 1
         await db.mark_download(destination)
 
     if not no_disconnect:
         await db.mark_string(destination, client.session.save(), flag=False)
-        await client.disconnect()
+        await disconnect(client)
 
     await loading.delete()
 
@@ -343,7 +384,7 @@ async def create_task(target, ids, client, destination, no_disconnect, loading, 
     if is_premium_user:
         await bot.send_message(
             destination,
-            f"**ᴄᴏɴɢʀᴀᴛᴜʟᴀᴛɪᴏɴs 🎉 ʏᴏᴜ ʜᴀᴠᴇ ʀᴇᴄᴇɪᴠᴇᴅ ᴛʜᴇ ᴄᴏɴᴛᴇɴᴛ ✅**\n\n"
+            f"**ᴄᴏɴɢʀᴀᴛᴜʟᴀᴛɪᴏɴs 🎉 ʏᴏᴜ ʜᴀᴠᴇ ʀᴇᴄᴇɪᴠᴇᴅ {total_sent} ᴏᴜᴛ ᴏꜰ {len(ids)} ✅**\n\n"
             f"**[+] ʏᴏᴜ ᴀʀᴇ ᴀ ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴ ᴜsᴇʀ 👍**\n"
             f"**[+] ᴅᴀɪʟʏ ʟɪᴍɪᴛ ʟᴇғᴛ: {db_user.today_remaining_limit}/{db_user.total_downloads_limit}**"
         )
