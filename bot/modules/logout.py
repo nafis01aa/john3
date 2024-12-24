@@ -33,8 +33,8 @@ async def logout_b(event):
     pid = event.data.decode()
 
     if 'delete_query' in pid:
-        await event.message.delete()
+        await event.delete()
         return
 
     await db.remove_login(event.chat_id, id=pid)
-    await event.message.edit("**Log Out Successful** ✅")
+    await event.edit("**Log Out Successful** ✅")
